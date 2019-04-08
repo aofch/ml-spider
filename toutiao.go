@@ -151,36 +151,40 @@ function getHoney() {
 // A Toutiao spider
 type Toutiao struct{}
 
-// 美食板块数据结构
-type Food struct {
-	HasMore     bool   `json:"has_more"`     // 是否还有更多
-	ReturnCount int    `json:"return_count"` // 返回的数据数量
-	PageID      string `json:"page_id"`      // 板块ID
-	Data        []struct {
-		Title    string `json:"title"`     // 标题
-		ShareURL string `json:"share_url"` // 分享链接, 这个都是头条的链接
-		Tag      string `json:"tag"`       // 数据标签
-	} `json:"data"`                          // 内容数据
-}
-
 func NewToutiao() *Toutiao {
 	return new(Toutiao)
 }
 
-func (s *Toutiao) foodSpiderColly() {
+// 美食板块数据结构
+type Food struct {
+	HasMore bool   `json:"has_more"` // 是否还有更多
+	Message string `json:"message"`  // success
+	Next    struct {
+		MaxBehotTime int64 `json:"max_behot_time"`
+	} `json:"next"`
+	Data []struct {
+		Title        string `json:"title"`         // 标题
+		SourceURL    string `json:"source_url"`    // 这个都是头条的链接
+		Tag          string `json:"tag"`           // 数据标签
+		ArticleGenre string `json:"article_genre"` // 文章类型 article, wenda, gallery
+	} `json:"data"` // 内容数据
+}
+
+func (s *Toutiao) spiderColly(tag, rdsTag string) {
 	vm = otto.New()
 	vm.Run(argsScript)
 
 	c := colly.NewCollector()
-	c.UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1"
+	c.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
 
 	c.OnRequest(func(r *colly.Request) {
-		log.Println("-------------------- 头条 -- 美食 --------------------")
+		log.Printf("-------------------- 头条 -- %s --------------------\n", tag)
+
 		log.Println(r.URL)
-		r.Headers.Set("Accept", "*/*")
-		r.Headers.Set("Host", "m.toutiao.com")
-		r.Headers.Set("Referer", "http://m.toutiao.com/?channel=news_food")
-		r.Headers.Set("Cookie", "UM_distinctid=169dbf765746df-07fc882151d9d1-7a1437-1fa400-169dbf76575b74; tt_webid=6675124015910422029; csrftoken=ec4ce25a53e2e7b059fccbe5936c2f54; W2atIF=1; _ga=GA1.2.1086170502.1554196286; _gid=GA1.2.843835667.1554196286; _ba=BA0.2-20190402-51225-vqj5zC33Cfha3iDNLvrS; tt_track_id=4334242fe44e8cde920f0c27ce47509a; __tasessionId=086rpkz4e1554203731291")
+		r.Headers.Set("accept", "text/javascript, text/html, application/xml, text/xml, */*")
+		r.Headers.Set("content-type", "application/x-www-form-urlencoded")
+		r.Headers.Set("referer", fmt.Sprintf("https://www.toutiao.com/ch/%s/", tag))
+		r.Headers.Set("cookie", "tt_webid=6675124015910422029; WEATHER_CITY=%E5%8C%97%E4%BA%AC; UM_distinctid=169dbf765746df-07fc882151d9d1-7a1437-1fa400-169dbf76575b74; tt_webid=6675124015910422029; csrftoken=ae5e10cb103108f623fbca1f0709e32f; _ga=GA1.2.1086170502.1554196286; tt_track_id=4334242fe44e8cde920f0c27ce47509a; _gid=GA1.2.2090333418.1554682889; __tasessionId=62b3hkg9i1554682940346; CNZZDATA1259612802=1995358668-1554168526-%7C1554681526")
 	})
 
 	c.OnError(func(r *colly.Response, e error) {
@@ -198,15 +202,19 @@ func (s *Toutiao) foodSpiderColly() {
 			return
 		}
 
-		if !strings.Contains(food.PageID, "news_food") {
-			log.Println(food.PageID, "该抓取的数据不是[美食]频道的数据")
-			return
+		if food.Message != "success" {
+			log.Fatal("获取数据错误", food.Message)
 		}
-		log.Println(food.HasMore, food.ReturnCount, food.PageID)
+
 		cnt := 0
 		for i, data := range food.Data {
-			if data.Tag != "news_food" {
-				log.Println(data.Tag, "这条数据不是美食数据", data.ShareURL)
+			data.SourceURL = "https://www.toutiao.com" + data.SourceURL
+			if data.Tag != tag {
+				log.Println(data.Tag, "这条数据不是该板块数据", data.SourceURL)
+				continue
+			}
+			if data.ArticleGenre != "article" {
+				log.Println(data.Tag, "这条数据不是文章类型", data.ArticleGenre)
 				continue
 			}
 			temp := struct {
@@ -214,7 +222,7 @@ func (s *Toutiao) foodSpiderColly() {
 				Link  string
 			}{
 				Title: strings.TrimSpace(data.Title),
-				Link:  strings.TrimSpace(data.ShareURL),
+				Link:  strings.TrimSpace(data.SourceURL),
 			}
 			body, err := json.Marshal(&temp)
 			if err != nil {
@@ -226,11 +234,29 @@ func (s *Toutiao) foodSpiderColly() {
 			log.Println(i, temp.Title, temp.Link)
 
 			// 持久化
-			rdsClient.HSet("toutiao_food", tmd5, body)
+			rdsClient.HSet(rdsTag, tmd5, body)
 			cnt++
 		}
 
 		log.Println("count", cnt, "has more", food.HasMore)
+
+		time.Sleep(500 * time.Millisecond)
+
+		// 下一次抓取
+		v, err := vm.Call("getHoney", nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		asCP, _ := v.Export()
+		asCPMap := asCP.(map[string]interface{})
+		cp := asCPMap["cp"].(string)
+		as := asCPMap["as"].(string)
+
+		// &_signature=TNwnDwAAEHdFkF0ak5HF40zcJx
+		l := fmt.Sprintf("https://www.toutiao.com/api/pc/feed/?category=%s&utm_source=toutiao&widen=1&max_behot_time=%d&max_behot_time_tmp=%d&tadrequire=true&as=%s&cp=%s",
+			tag, food.Next.MaxBehotTime, food.Next.MaxBehotTime, as, cp)
+
+		r.Request.Visit(l)
 	})
 
 	v, err := vm.Call("getHoney", nil)
@@ -242,12 +268,10 @@ func (s *Toutiao) foodSpiderColly() {
 	cp := asCPMap["cp"].(string)
 	as := asCPMap["as"].(string)
 
-	l := fmt.Sprintf(
-		"http://m.toutiao.com/list/?tag=news_food&ac=wap&count=20&format=json_raw&max_behot_time=%d&i=%d&as=%s&cp=%s",
-		time.Now().Unix(), time.Now().Add(-20 * time.Minute).Unix(), as, cp)
+	l := fmt.Sprintf("https://www.toutiao.com/api/pc/feed/?category=%s&utm_source=toutiao&widen=1&max_behot_time=0&max_behot_time_tmp=0&tadrequire=true&as=%s&cp=%s&_signature=X.g8yQAAA1JWtEbc-Ecn0V.4PN",
+		tag, as, cp)
 
 	c.Visit(l)
-	//http://m.toutiao.com/list/?tag=news_food&ac=wap&count=20&format=json_raw&as=A1858C4A8374475&cp=5CA3C494C765BE1&min_behot_time=1554203761&_signature=7p-MmQAAskfn0.aMlyHYXO6fjI&i=1554200516
 }
 
 func (s *Toutiao) foodSpider() {
