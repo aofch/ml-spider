@@ -11,6 +11,8 @@ github.com/antchfx/xpath v0.0.0-20190319080838-ce1d48779e67/go.mod h1:Yee4kTMuNi
 github.com/chromedp/cdproto v0.0.0-20190217000753-2d8e8962ceb2/go.mod h1:xquOK9dIGFlLaIGI4c6IyfLI/Gz0LiYYuJtzhsUODgI=
 github.com/chromedp/cdproto v0.0.0-20190316014124-183f1739f584 h1:k/Smf53pIxbMqoCpLJreVejyZ+bpuOv9XpYcjqlUrTA=
 github.com/chromedp/cdproto v0.0.0-20190316014124-183f1739f584/go.mod h1:xquOK9dIGFlLaIGI4c6IyfLI/Gz0LiYYuJtzhsUODgI=
+github.com/chromedp/cdproto v0.0.0-20190407221054-e2ccc0cc2d77 h1:HFX9/nG/k2Iom0EhnaY/5DlWlNDin1vovpFb6PiniOM=
+github.com/chromedp/cdproto v0.0.0-20190407221054-e2ccc0cc2d77/go.mod h1:xquOK9dIGFlLaIGI4c6IyfLI/Gz0LiYYuJtzhsUODgI=
 github.com/chromedp/chromedp v0.1.3 h1:Nkqt42/7tvzg57mexc4LbM8nZbx7vSZ+eiUpeczGGL8=
 github.com/chromedp/chromedp v0.1.3/go.mod h1:ZahQlJx8YBfDtuFN80zn6P7fskSotBkdhgKDoLWFANk=
 github.com/disintegration/imaging v1.6.0 h1:nVPXRUUQ36Z7MNf0O77UzgnOb1mkMMor7lmJMJXc/mA=

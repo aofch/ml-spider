@@ -7,7 +7,7 @@ require (
 	github.com/antchfx/htmlquery v1.0.0 // indirect
 	github.com/antchfx/xmlquery v1.0.0 // indirect
 	github.com/antchfx/xpath v0.0.0-20190319080838-ce1d48779e67 // indirect
-	github.com/chromedp/cdproto v0.0.0-20190316014124-183f1739f584
+	github.com/chromedp/cdproto v0.0.0-20190407221054-e2ccc0cc2d77
 	github.com/chromedp/chromedp v0.1.3
 	github.com/dlclark/regexp2 v1.1.6 // indirect
 	github.com/dop251/goja v0.0.0-20190301185519-64be363d126e // indirect

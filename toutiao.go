@@ -282,7 +282,7 @@ func (s *Toutiao) foodSpider() {
 	defer cancel()
 
 	// create chrome instance
-	//c, err := chromedp.New(ctx, chromedp.WithLog(log.Printf))
+	// c, err := chromedp.New(ctx, chromedp.WithLog(log.Printf))
 	c, err := chromedp.New(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -369,12 +369,12 @@ func (s *Toutiao) taskFood(link string) chromedp.Tasks {
 	}
 }
 
-//// 截图
-//func screenshot(urlstr, sel string, res *[]byte) chromedp.Tasks {
-//	return chromedp.Tasks{
-//		chromedp.Navigate(urlstr),
-//		chromedp.Sleep(2 * time.Second),
-//		chromedp.WaitVisible(sel, chromedp.ByQuery),
-//		chromedp.Screenshot(sel, res, chromedp.NodeVisible, chromedp.ByQuery),
-//	}
-//}
+// // 截图
+// func screenshot(urlstr, sel string, res *[]byte) chromedp.Tasks {
+// 	return chromedp.Tasks{
+// 		chromedp.Navigate(urlstr),
+// 		chromedp.Sleep(2 * time.Second),
+// 		chromedp.WaitVisible(sel, chromedp.ByQuery),
+// 		chromedp.Screenshot(sel, res, chromedp.NodeVisible, chromedp.ByQuery),
+// 	}
+// }

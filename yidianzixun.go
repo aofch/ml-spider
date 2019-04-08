@@ -14,7 +14,6 @@ import (
 	"github.com/gocolly/colly/storage"
 	"log"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -23,9 +22,10 @@ import (
 var (
 	ydzxScript = `
         function good (n,e,i,t){
-            for (var o = "sptoken", a = "", c = 1; c < arguments.length; c++){
+            for (var o = "sptoken", a = "", c = 0; c < arguments.length; c++){
                 o += arguments[c];
             }
+
             for (var c = 0; c < o.length; c++) {
                 var r = 10 ^ o.charCodeAt(c);
                 a += String.fromCharCode(r)
@@ -36,12 +36,23 @@ var (
 )
 
 func getSPT(args ...string) string {
+
+	// vm := otto.New()
+	// vm.Run(ydzxScript)
+	// n := "/home/q/news_list_for_channel?channel_id=u9365&cstart=0&cend=10&infinite=true&refresh=1&__from__=pc&multi=5"
+	//
+	// v, err := vm.Call("good", n, "u9365", "0", "10")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// asCP, _ := v.Export()
+	// log.Println(asCP)
+
 	o := "sptoken"
 	a := ""
 	for c := 1; c < len(args); c++ {
 		o += args[c]
 	}
-
 	for _, b := range []rune(o) {
 		r := 10 ^ b
 		a += string(r)
@@ -67,7 +78,7 @@ type YidianzixunResult struct {
 		Title string `json:"title"` // 标题
 		DocID string `json:"docid"` // 文章ID, 用于生成文章链接
 		CType string `json:"ctype"` // news, video_live
-		//DType    int    `json:"dtype"`    // 1, 3, 23
+		// DType    int    `json:"dtype"`    // 1, 3, 23
 		Category string `json:"category"` // 汽车,财经
 	} `json:"result"`
 }
@@ -77,7 +88,7 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 	nSPT := getSPT(n, "u9365", "0", "10")
 	log.Println(nSPT)
 
-	os.Exit(0)
+	// os.Exit(0)
 	cURL := "http://www.yidianzixun.com/channel/" + channelID
 
 	c := colly.NewCollector()
@@ -130,8 +141,8 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 		if strings.Contains(r.Request.URL.Path, "/channel/") {
 			n := "/home/q/news_list_for_channel?channel_id=" + cid + "&cstart=0&cend=10&infinite=true&refresh=1&__from__=pc&multi=5"
 			nSPT := getSPT(n, cid, "0", "10")
-			log.Println(nSPT)
-			apiURL := "http://www.yidianzixun.com/home/q/news_list_for_channel?channel_id=" + cid + "&cstart=0&cend=10&infinite=true&refresh=1&__from__=pc&multi=5&_spt=" + nSPT + "&appid=yidian&_=" + fmt.Sprintf("%d", time.Now().UnixNano()/1e6)
+			nSPT = url.QueryEscape(nSPT)
+			apiURL := fmt.Sprintf("http://www.yidianzixun.com/home/q/news_list_for_channel?channel_id=%s&cstart=0&cend=10&infinite=true&refresh=1&__from__=pc&multi=5&_spt=%s&appid=web_yidian&_=%d", cid, nSPT, time.Now().UnixNano()/1e6)
 			r.Ctx.Put("cstart", "10")
 			r.Request.Visit(apiURL)
 			return
@@ -173,18 +184,17 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 				Title: strings.TrimSpace(data.Title),
 				Link:  strings.TrimSpace(link),
 			}
-			//body, err := json.Marshal(&temp)
-			//if err != nil {
-			//	log.Println("failed to error marshal", err)
-			//	continue
-			//}
-			//tmd5 := Get16MD5(temp.Title)
+			body, err := json.Marshal(&temp)
+			if err != nil {
+				log.Println("failed to error marshal", err)
+				continue
+			}
+			tmd5 := Get16MD5(temp.Title)
 
 			log.Println(i, data.Category, temp.Title, temp.Link)
 
 			// 持久化
-			//rdsClient.HSet(rdsTag, tmd5, body)
-
+			rdsClient.HSet(rdsTag, tmd5, body)
 		}
 
 		cstartStr := r.Ctx.Get("cstart")
@@ -197,6 +207,7 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 
 		n := "/home/q/news_list_for_channel?channel_id=" + cid + "&cstart=" + cstartStr + "&cend=" + cendStr + "&infinite=true&refresh=1&__from__=pc&multi=5"
 		nSPT := getSPT(n, cid, cstartStr, cendStr)
+		nSPT = url.QueryEscape(nSPT)
 
 		apiURL := "http://www.yidianzixun.com/home/q/news_list_for_channel?channel_id=" +
 			cid + "&cstart=" +

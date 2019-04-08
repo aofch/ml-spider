@@ -38,15 +38,15 @@ func main() {
 		}
 	}()
 
-	NewYidianzixun().spiderColly("u9365", "美食", "ydzx_food")
+	NewYidianzixun().spiderColly("u144", "美食", "ydzx_food")
 
-	//NewToutiao().spiderColly("news_game", "toutiao_game") // 游戏
-	//NewToutiao().spiderColly("news_tech", "toutiao_tech") // 科技
-	//NewToutiao().spiderColly("news_history", "toutiao_history") // 历史
-	//NewToutiao().spiderColly("news_military", "toutiao_military") // 军事
-	//NewToutiao().spiderColly("news_sports", "toutiao_sports") // 体育
-	//NewToutiao().spiderColly("news_finance", "toutiao_finance") // 财经
-	//NewToutiao().spiderColly("news_car", "toutiao_car") // 汽车
+	// NewToutiao().spiderColly("news_game", "toutiao_game") // 游戏
+	// NewToutiao().spiderColly("news_tech", "toutiao_tech") // 科技
+	// NewToutiao().spiderColly("news_history", "toutiao_history") // 历史
+	// NewToutiao().spiderColly("news_military", "toutiao_military") // 军事
+	// NewToutiao().spiderColly("news_sports", "toutiao_sports") // 体育
+	// NewToutiao().spiderColly("news_finance", "toutiao_finance") // 财经
+	// NewToutiao().spiderColly("news_car", "toutiao_car") // 汽车
 }
 
 // GetMD5 获取md5值
