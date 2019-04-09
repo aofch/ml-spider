@@ -8,12 +8,8 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/chromedp/cdproto/cdp"
-	"github.com/chromedp/chromedp"
 	"github.com/gocolly/colly"
 	"github.com/robertkrimen/otto"
 	"log"
@@ -273,108 +269,3 @@ func (s *Toutiao) spiderColly(tag, rdsTag string) {
 
 	c.Visit(l)
 }
-
-func (s *Toutiao) foodSpider() {
-	var err error
-	foodLink := "https://www.toutiao.com/ch/news_food/"
-	// create context
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// create chrome instance
-	// c, err := chromedp.New(ctx, chromedp.WithLog(log.Printf))
-	c, err := chromedp.New(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// run task list
-	idx := 0
-	for {
-		if idx >= 1 {
-			break
-		}
-
-		err = c.Run(ctx, s.taskFood(foodLink))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		idx++
-
-		// Sleep 2s
-		time.Sleep(2 * time.Second)
-	}
-
-	// shutdown chrome
-	err = c.Shutdown(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// wait for chrome to finish
-	err = c.Wait()
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-// 获取美食数据
-func (s *Toutiao) taskFood(link string) chromedp.Tasks {
-	var res string
-	return chromedp.Tasks{
-		chromedp.Navigate(link),
-		chromedp.WaitVisible(".wcommonFeed .item", chromedp.ByQuery),
-		chromedp.Sleep(3 * time.Second),
-		chromedp.ScrollIntoView("//div[@class='wcommonFeed']/ul/li[last()]", chromedp.BySearch),
-		chromedp.Sleep(60 * time.Second), // 留给手动滚动的时间
-		chromedp.OuterHTML(".wcommonFeed", &res, chromedp.ByQuery),
-		chromedp.ActionFunc(func(context.Context, cdp.Executor) error {
-			// 解析DOM文档
-			doc, err := goquery.NewDocumentFromReader(strings.NewReader(res))
-			if err != nil {
-				return err
-			}
-			log.Println("-------------------------------------------------")
-			// 遍历数据
-			doc.Find(".wcommonFeed .item .link.title").EachWithBreak(func(i int, selec *goquery.Selection) bool {
-				title := strings.TrimSpace(selec.Text()) // 标题
-				link, exists := selec.Attr("href")       // 链接
-				if !exists {
-					// 不存在链接, 则跳过
-					return false
-				}
-				link = "https://www.toutiao.com" + link
-
-				println(i, title, link)
-				tmd5 := Get16MD5(title)
-
-				data := struct {
-					Title string
-					Link  string
-				}{
-					Title: title,
-					Link:  link,
-				}
-				body, err := json.Marshal(&data)
-				if err != nil {
-					log.Println("failed to error marshal", err)
-					return false
-				}
-				rdsClient.HSet("toutiao_food", tmd5, body)
-				return true
-			})
-			return nil
-		}),
-	}
-}
-
-// // 截图
-// func screenshot(urlstr, sel string, res *[]byte) chromedp.Tasks {
-// 	return chromedp.Tasks{
-// 		chromedp.Navigate(urlstr),
-// 		chromedp.Sleep(2 * time.Second),
-// 		chromedp.WaitVisible(sel, chromedp.ByQuery),
-// 		chromedp.Screenshot(sel, res, chromedp.NodeVisible, chromedp.ByQuery),
-// 	}
-// }

@@ -10,6 +10,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/storage"
 	"log"
@@ -36,18 +37,6 @@ var (
 )
 
 func getSPT(args ...string) string {
-
-	// vm := otto.New()
-	// vm.Run(ydzxScript)
-	// n := "/home/q/news_list_for_channel?channel_id=u9365&cstart=0&cend=10&infinite=true&refresh=1&__from__=pc&multi=5"
-	//
-	// v, err := vm.Call("good", n, "u9365", "0", "10")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// asCP, _ := v.Export()
-	// log.Println(asCP)
-
 	o := "sptoken"
 	a := ""
 	for c := 1; c < len(args); c++ {
@@ -84,11 +73,6 @@ type YidianzixunResult struct {
 }
 
 func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
-	n := "/home/q/news_list_for_channel?channel_id=u9365&cstart=0&cend=10&infinite=true&refresh=1&__from__=pc&multi=5"
-	nSPT := getSPT(n, "u9365", "0", "10")
-	log.Println(nSPT)
-
-	// os.Exit(0)
 	cURL := "http://www.yidianzixun.com/channel/" + channelID
 
 	c := colly.NewCollector()
@@ -99,7 +83,7 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 	}
 
 	c.OnRequest(func(r *colly.Request) {
-		log.Printf("-------------------- 一点资讯 -- %s --------------------\n", tag)
+		log.Printf("-------------------- 一点资讯 -- %s -- %s --------------------\n", tag, channelID)
 
 		log.Println(r.URL)
 
@@ -170,12 +154,11 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 		}
 
 		for i, data := range result.Datas {
-
+			link := "http://www.yidianzixun.com/article/" + data.DocID
 			if data.CType != "news" || data.Category != tag {
-				log.Println(i, "该条数据不正确", data.CType, data.Category)
+				log.Println(i, "该条数据不正确", data.CType, data.Category, link)
 				continue
 			}
-			link := "http://www.yidianzixun.com/article/" + data.DocID
 
 			temp := struct {
 				Title string
@@ -187,6 +170,10 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 			body, err := json.Marshal(&temp)
 			if err != nil {
 				log.Println("failed to error marshal", err)
+				continue
+			}
+			if temp.Title == "" {
+				log.Println("标题为空")
 				continue
 			}
 			tmd5 := Get16MD5(temp.Title)
@@ -203,7 +190,7 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 		r.Ctx.Put("cstart", cendStr)
 
 		log.Println(cstartStr, cendStr)
-		time.Sleep(2 * time.Second)
+		time.Sleep(200 * time.Millisecond)
 
 		n := "/home/q/news_list_for_channel?channel_id=" + cid + "&cstart=" + cstartStr + "&cend=" + cendStr + "&infinite=true&refresh=1&__from__=pc&multi=5"
 		nSPT := getSPT(n, cid, cstartStr, cendStr)
@@ -234,4 +221,20 @@ func (s *Yidianzixun) spiderColly(channelID, tag, rdsTag string) {
 	if err := c.Visit(cURL); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (s *Yidianzixun) mediaList(txt string) []string {
+	var cidArr []string
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(txt))
+	doc.Find(".channel-img").Each(func(i int, selection *goquery.Selection) {
+		href := strings.TrimSpace(selection.AttrOr("href", ""))
+		if href == "" {
+			return
+		}
+
+		cid := strings.TrimLeft(href, "/channel/")
+		cidArr = append(cidArr, cid)
+	})
+
+	return cidArr
 }
