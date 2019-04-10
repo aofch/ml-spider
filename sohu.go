@@ -31,7 +31,7 @@ type SohuResult struct {
 		WapArticleVOS []struct {
 			ID     int    `json:"id"`     // 文章ID
 			UserID int    `json:"userId"` // 搜狐号ID
-			Type   int    `json:"type"`   // 1: 文本, 2: 图文 5: 视频
+			Type   int    `json:"type"`   // 1: 文本, 2: 图文 3: 画廊模式 5: 视频
 			Title  string `json:"title"`  // 标题
 		} `json:"wapArticleVOS"`
 	} `json:"data"`

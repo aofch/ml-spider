@@ -318,8 +318,8 @@ var (
 
 func init() {
 	rdsClient = redis.NewClient(&redis.Options{
-		Addr:     "",
-		Password: "",
+		Addr:     "210.5.152.217:30703",
+		Password: "lol_wf+hl.1211+1522",
 		DB:       1,
 	})
 	_, err := rdsClient.Ping().Result()
@@ -345,21 +345,17 @@ func main() {
 	//}
 
 	// NewToutiao().spiderColly("news_game", "toutiao_game") // 游戏
-	// NewToutiao().spiderColly("news_tech", "toutiao_tech") // 科技
-	// NewToutiao().spiderColly("news_history", "toutiao_history") // 历史
-	// NewToutiao().spiderColly("news_military", "toutiao_military") // 军事
-	// NewToutiao().spiderColly("news_sports", "toutiao_sports") // 体育
-	// NewToutiao().spiderColly("news_finance", "toutiao_finance") // 财经
-	// NewToutiao().spiderColly("news_car", "toutiao_car") // 汽车
-	// NewToutiao().spiderColly("news_food", "toutiao_food")
+	// NewSohu().spiderMPColly(100226961, 1, "sohu_history")
 
-	NewSohu().spiderMPColly(100253173, 1, "sohu_comic")
+	// NewSina().spiderCulColly()
 
-	// 一点资讯, 头条
-	// 动漫 1544 comic
+	//NewWangyi().spiderMediaColly(2000000, "T1504947175625", "wangyi_history")
+	//NewToutiao().spiderMPColly(6092427995, "news_history", "toutiao_history")
+	NewToutiao().spiderChrome()
+
+	// 一点资讯, 搜狐, 头条
 	// 文化 1968 culture
 	// 情感 3008 emotion
-	// 美食 4335 food
 	// 历史 3294 history
 	// 家居 1006 home
 	// 房产 963 house
@@ -367,11 +363,12 @@ func main() {
 	// 军事 3110 military
 	// 时政 474 politics
 	// 科学 1271 science
-	// 社会 896 society
+
 	// 体育 3508 sports
 	// 科技 4207 tech
 	// 旅游 3341 travel
-
+	// 美食 4335 food
+	// 动漫 1544 comic
 	// 育儿 6034 baby
 	// 汽车 11687 car
 	// 教育 5740 education

@@ -8,11 +8,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp/client"
+	"github.com/chromedp/chromedp/runner"
 	"github.com/gocolly/colly"
 	"github.com/robertkrimen/otto"
+	"io/ioutil"
 	"log"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -180,7 +187,7 @@ func (s *Toutiao) spiderColly(tag, rdsTag string) {
 		r.Headers.Set("accept", "text/javascript, text/html, application/xml, text/xml, */*")
 		r.Headers.Set("content-type", "application/x-www-form-urlencoded")
 		r.Headers.Set("referer", fmt.Sprintf("https://www.toutiao.com/ch/%s/", tag))
-		r.Headers.Set("cookie", "tt_webid=6675124015910422029; WEATHER_CITY=%E5%8C%97%E4%BA%AC; UM_distinctid=169dbf765746df-07fc882151d9d1-7a1437-1fa400-169dbf76575b74; tt_webid=6675124015910422029; csrftoken=ae5e10cb103108f623fbca1f0709e32f; _ga=GA1.2.1086170502.1554196286; tt_track_id=4334242fe44e8cde920f0c27ce47509a; _gid=GA1.2.2090333418.1554682889; __tasessionId=62b3hkg9i1554682940346; CNZZDATA1259612802=1995358668-1554168526-%7C1554681526")
+		r.Headers.Set("cookie", "tt_webid=6675124015910422029; Domain=.toutiao.com; expires=Tue, 09-Jul-2019 14:25:19 GMT; Max-Age=7804800; Path=/")
 	})
 
 	c.OnError(func(r *colly.Response, e error) {
@@ -188,6 +195,7 @@ func (s *Toutiao) spiderColly(tag, rdsTag string) {
 	})
 
 	c.OnScraped(func(r *colly.Response) {
+
 		if r.StatusCode != 200 {
 			log.Println("failed statuscode =", r.StatusCode)
 			return
@@ -248,7 +256,6 @@ func (s *Toutiao) spiderColly(tag, rdsTag string) {
 		cp := asCPMap["cp"].(string)
 		as := asCPMap["as"].(string)
 
-		// &_signature=TNwnDwAAEHdFkF0ak5HF40zcJx
 		l := fmt.Sprintf("https://www.toutiao.com/api/pc/feed/?category=%s&utm_source=toutiao&widen=1&max_behot_time=%d&max_behot_time_tmp=%d&tadrequire=true&as=%s&cp=%s",
 			tag, food.Next.MaxBehotTime, food.Next.MaxBehotTime, as, cp)
 
@@ -268,4 +275,184 @@ func (s *Toutiao) spiderColly(tag, rdsTag string) {
 		tag, as, cp)
 
 	c.Visit(l)
+}
+
+// 头条号
+func (s *Toutiao) spiderMPColly(mid int64, tag, rdsTag string) {
+
+	c := colly.NewCollector()
+	c.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0"
+
+	c.OnRequest(func(r *colly.Request) {
+		log.Printf("-------------------- 头条 -- %s --------------------\n", tag)
+
+		log.Println(r.URL)
+		r.Headers.Set("Accept", "application/json, text/javascript")
+		r.Headers.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Headers.Set("Host", "www.toutiao.com")
+		r.Headers.Set("Referer", fmt.Sprintf("https://www.toutiao.com/c/user/%d/", mid))
+	})
+
+	c.OnError(func(r *colly.Response, e error) {
+		log.Fatalln(r.StatusCode, e)
+	})
+
+	c.OnScraped(func(r *colly.Response) {
+		if r.StatusCode != 200 {
+			log.Println("failed statuscode =", r.StatusCode)
+			return
+		}
+		var food Food
+		if err := json.Unmarshal(r.Body, &food); err != nil {
+			log.Println(err)
+			return
+		}
+
+		if food.Message != "success" {
+			log.Fatal("获取数据错误", food.Message)
+		}
+
+		cnt := 0
+		for i, data := range food.Data {
+			data.SourceURL = "https://www.toutiao.com" + data.SourceURL
+			if data.Tag != tag {
+				log.Println(data.Tag, "这条数据不是该板块数据", data.SourceURL)
+				continue
+			}
+			if data.ArticleGenre != "article" {
+				log.Println(data.Tag, "这条数据不是文章类型", data.ArticleGenre)
+				continue
+			}
+			temp := struct {
+				Title string
+				Link  string
+			}{
+				Title: strings.TrimSpace(data.Title),
+				Link:  strings.TrimSpace(data.SourceURL),
+			}
+			body, err := json.Marshal(&temp)
+			if err != nil {
+				log.Println("failed to error marshal", err)
+				continue
+			}
+			tmd5 := Get16MD5(temp.Title)
+
+			log.Println(i, temp.Title, temp.Link)
+
+			// 持久化
+			rdsClient.HSet(rdsTag, tmd5, body)
+			cnt++
+		}
+		if !food.HasMore {
+			log.Println("数据抓取完成")
+			os.Exit(0)
+		}
+
+		log.Println("count", cnt, "has more", food.HasMore)
+
+		time.Sleep(500 * time.Millisecond)
+
+		// 下一次抓取
+		signature := strings.TrimSpace(s.getSign(fmt.Sprintf("%d%d", mid, food.Next.MaxBehotTime)))
+		l := fmt.Sprintf("https://www.toutiao.com/c/user/article/?page_type=1&user_id=%d&max_behot_time=%d&count=20&_signature=%s", mid, food.Next.MaxBehotTime, signature)
+		if err := r.Request.Visit(l); err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	signature := strings.TrimSpace(s.getSign(fmt.Sprintf("%d%d", mid, time.Now().UnixNano()/1e6)))
+	log.Println(signature)
+
+	//signature := "XMFl2xAdAG2wZAq9GpWQIFzBZc"
+	l := fmt.Sprintf("https://www.toutiao.com/c/user/article/?page_type=1&user_id=%d&max_behot_time=0&count=20&_signature=%s", mid, signature)
+
+	if err := c.Visit(l); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (s *Toutiao) getSign(tmp string) string {
+	cmd := exec.Command("node", "toutiao.js", fmt.Sprintf("%d", tmp))
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatal(err)
+	}
+	// 保证关闭输出流
+	defer stdout.Close()
+	// 运行命令
+	if err := cmd.Start(); err != nil {
+		log.Fatal(err)
+	}
+	// 读取输出结果
+	opBytes, err := ioutil.ReadAll(stdout)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return string(opBytes)
+}
+
+func (s *Toutiao) spiderChrome() {
+	// create context
+	ctxt, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runnerOps := chromedp.WithRunnerOptions(
+		//启动chrome的时候不检查默认浏览器
+		//runner.Flag("no-default-browser-check", true),
+		//启动chrome 不适用沙盒, 性能优先
+		runner.Flag("no-sandbox", true),
+		//设置浏览器窗口尺寸,
+		//runner.WindowSize(1280, 1024),
+		//设置浏览器的userage
+		runner.UserAgent(`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36`),
+	)
+
+	// 在普通模式的情况下启动chrome程序,并且建立共代码和chrome程序的之间的连接(https://127.0.0.1:9222)
+	//chromedp.WithLog(log.Printf)
+	cdp, err := chromedp.New(ctxt, runnerOps)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 获取参数
+	//var sign string
+	//var honey interface{}
+	//cdp.Run(ctxt, actionParam(6092427995, 0, "wrapper", &sign, &honey))
+	//honeyMap := honey.(map[string]interface{})
+	//log.Println(sign)
+	//log.Println(honeyMap)
+	//time.Sleep(2 * time.Second)
+
+	cdp.Run(ctxt, chromedp.Navigate("http://www.baidu.com"))
+
+	// 抓取数据
+	cdpClient := client.New()
+	dataTarget, err := cdpClient.NewPageTargetWithURL(ctxt, "http://www.google.com")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(dataTarget.GetType())
+
+	cdp.Run(ctxt, chromedp.Tasks{
+		chromedp.Navigate("http://www.baidu.com"),
+	})
+
+	log.Println("--------------")
+
+	//h, _ := chromedp.NewTargetHandler(t, log.Printf, log.Printf, log.Printf)
+	//h.Run(ctxt)
+
+	time.Sleep(10 * time.Second)
+	cdp.Shutdown(ctxt)
+}
+
+func actionParam(mid, t int64, sel string, sign *string, honey interface{}) chromedp.Tasks {
+	urlStr := fmt.Sprintf("https://www.toutiao.com/c/user/%d/#mid=%d", mid, mid)
+	return chromedp.Tasks{
+		chromedp.Navigate(urlStr),
+		chromedp.WaitVisible(sel, chromedp.ByID),
+		chromedp.EvaluateAsDevTools(fmt.Sprintf("TAC.sign(%d%d)", mid, t), sign),
+		chromedp.EvaluateAsDevTools("ascp.getHoney()", honey),
+	}
 }
