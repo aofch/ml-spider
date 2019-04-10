@@ -318,8 +318,8 @@ var (
 
 func init() {
 	rdsClient = redis.NewClient(&redis.Options{
-		Addr:     "210.5.152.217:30703",
-		Password: "lol_wf+hl.1211+1522",
+		Addr:     "",
+		Password: "",
 		DB:       1,
 	})
 	_, err := rdsClient.Ping().Result()
