@@ -9,10 +9,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
-	"github.com/chromedp/chromedp/client"
 	"github.com/chromedp/chromedp/runner"
 	"github.com/gocolly/colly"
 	"github.com/robertkrimen/otto"
@@ -392,20 +391,24 @@ func (s *Toutiao) getSign(tmp string) string {
 	return string(opBytes)
 }
 
-func (s *Toutiao) spiderChrome() {
+// 头条号抓取, 有头浏览器
+func (s *Toutiao) spiderChrome(mid int64, tag, rdsTag string) {
 	// create context
+	//ctxt, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	ctxt, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	runnerOps := chromedp.WithRunnerOptions(
-		//启动chrome的时候不检查默认浏览器
+		// 启动chrome的时候不检查默认浏览器
 		//runner.Flag("no-default-browser-check", true),
-		//启动chrome 不适用沙盒, 性能优先
+		// 启动chrome 不适用沙盒, 性能优先
 		runner.Flag("no-sandbox", true),
-		//设置浏览器窗口尺寸,
+		// 设置浏览器窗口尺寸,
 		//runner.WindowSize(1280, 1024),
-		//设置浏览器的userage
+		// 设置浏览器的userage
 		runner.UserAgent(`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36`),
+		// 启动headless
+		//runner.Flag("headless", true),
 	)
 
 	// 在普通模式的情况下启动chrome程序,并且建立共代码和chrome程序的之间的连接(https://127.0.0.1:9222)
@@ -415,44 +418,131 @@ func (s *Toutiao) spiderChrome() {
 		log.Fatal(err)
 	}
 
-	// 获取参数
-	//var sign string
-	//var honey interface{}
-	//cdp.Run(ctxt, actionParam(6092427995, 0, "wrapper", &sign, &honey))
-	//honeyMap := honey.(map[string]interface{})
-	//log.Println(sign)
-	//log.Println(honeyMap)
-	//time.Sleep(2 * time.Second)
+	// 获取第一页的标签ID
+	homeTID := cdp.ListTargets()[0]
+	log.Println("home target id", homeTID)
 
-	cdp.Run(ctxt, chromedp.Navigate("http://www.baidu.com"))
+	log.Println("open home")
+	homeURL := fmt.Sprintf("https://www.toutiao.com/c/user/%d/#mid=%d", mid, mid)
+	handleErr(cdp.Run(ctxt, chromedp.Tasks{
+		chromedp.Navigate(homeURL),
+		chromedp.WaitReady(".relatedFeed", chromedp.ByQuery),
+	}))
+	var behotTime int64
+	pageIndex := 0
+	for {
+		log.Println("get sign & honey")
+		handleErr(cdp.SetHandlerByID(homeTID))
+		log.Println("change handle home", homeTID)
+		var sign string
+		var honey interface{}
+		handleErr(cdp.Run(ctxt, actionParam(mid, behotTime, &sign, &honey)))
+		honeyMap := honey.(map[string]interface{})
+		log.Println(sign, honeyMap)
 
-	// 抓取数据
-	cdpClient := client.New()
-	dataTarget, err := cdpClient.NewPageTargetWithURL(ctxt, "http://www.google.com")
-	if err != nil {
-		log.Fatal(err)
+		log.Println("open new data target page")
+		var dataTID string
+		handleErr(cdp.NewTarget(&dataTID).Do(ctxt, cdp.GetHandlerByID(homeTID)))
+
+		log.Println("change handle data", dataTID)
+		handleErr(cdp.SetHandlerByID(dataTID))
+
+		dataURL := fmt.Sprintf("https://www.toutiao.com/c/user/article/?page_type=1&user_id=%d&max_behot_time=%d&count=20&as=%s&cp=%s&_signature=%s",
+			mid, behotTime, honeyMap["as"], honeyMap["cp"], sign)
+		log.Println("open data url", dataURL)
+
+		var bodyStr string
+		handleErr(cdp.Run(ctxt, chromedp.Tasks{
+			chromedp.Navigate(dataURL),
+			chromedp.WaitReady("body", chromedp.ByQuery),
+			chromedp.Text("body", &bodyStr),
+		}))
+
+		// 解析数据
+		var food Food
+		if err := json.Unmarshal([]byte(bodyStr), &food); err != nil {
+			log.Fatalln(err)
+		}
+		if err = processData(&food, tag, rdsTag); err != nil {
+			log.Fatalln(err)
+		}
+
+		behotTime = food.Next.MaxBehotTime
+
+		pageIndex++
+
+		log.Printf("------------------------------ %d ------------------------------\n", pageIndex)
+		_, err = target.CloseTarget(target.ID(dataTID)).Do(ctxt, cdp.GetHandlerByID(dataTID))
+		handleErr(err)
+
+		if !food.HasMore {
+			break
+		}
+
+		time.Sleep(200 * time.Millisecond)
 	}
-	log.Println(dataTarget.GetType())
 
-	cdp.Run(ctxt, chromedp.Tasks{
-		chromedp.Navigate("http://www.baidu.com"),
-	})
+	log.Println("crawler done", mid)
 
-	log.Println("--------------")
-
-	//h, _ := chromedp.NewTargetHandler(t, log.Printf, log.Printf, log.Printf)
-	//h.Run(ctxt)
-
-	time.Sleep(10 * time.Second)
-	cdp.Shutdown(ctxt)
+	if err = cdp.Shutdown(ctxt); err != nil {
+		log.Fatalln(err)
+	}
 }
 
-func actionParam(mid, t int64, sel string, sign *string, honey interface{}) chromedp.Tasks {
-	urlStr := fmt.Sprintf("https://www.toutiao.com/c/user/%d/#mid=%d", mid, mid)
+func actionCrawlerData(res *string) chromedp.Tasks {
 	return chromedp.Tasks{
-		chromedp.Navigate(urlStr),
-		chromedp.WaitVisible(sel, chromedp.ByID),
-		chromedp.EvaluateAsDevTools(fmt.Sprintf("TAC.sign(%d%d)", mid, t), sign),
+		chromedp.WaitReady("body", chromedp.BySearch),
+		chromedp.Text("body", res, chromedp.BySearch),
+	}
+}
+
+func actionParam(mid, t int64, sign *string, honey interface{}) chromedp.Tasks {
+	scriptSign := fmt.Sprintf("TAC.sign('%d%d')", mid, t)
+	return chromedp.Tasks{
+		chromedp.EvaluateAsDevTools(scriptSign, sign),
 		chromedp.EvaluateAsDevTools("ascp.getHoney()", honey),
 	}
+}
+
+func processData(food *Food, tag, rdsTag string) error {
+	if food == nil {
+		return fmt.Errorf("failed to nil")
+	}
+	if food.Message != "success" {
+		return fmt.Errorf("error: %s", food.Message)
+	}
+
+	for i, data := range food.Data {
+		data.Title = strings.TrimSpace(data.Title)
+		data.SourceURL = strings.TrimSpace(data.SourceURL)
+		data.SourceURL = "https://www.toutiao.com" + data.SourceURL
+		if data.Tag != tag {
+			log.Println(i, data.Tag, "这条数据不是该板块数据", data.SourceURL)
+			continue
+		}
+		if data.ArticleGenre != "article" {
+			log.Println(i, data.Tag, "这条数据不是文章类型", data.ArticleGenre)
+			continue
+		}
+
+		temp := struct {
+			Title string
+			Link  string
+		}{
+			Title: strings.TrimSpace(data.Title),
+			Link:  strings.TrimSpace(data.SourceURL),
+		}
+		body, err := json.Marshal(&temp)
+		if err != nil {
+			log.Println("failed to error marshal", err)
+			continue
+		}
+		tmd5 := Get16MD5(temp.Title)
+
+		log.Println(i, temp.Title, temp.Link)
+
+		// 持久化
+		rdsClient.HSet(rdsTag, tmd5, body)
+	}
+	return nil
 }

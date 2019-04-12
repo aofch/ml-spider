@@ -313,16 +313,27 @@ var (
   </div>
 </div>
 `
-	rdsClient *redis.Client
+	rdsClient  *redis.Client
+	frdsClient *redis.Client
 )
 
 func init() {
 	rdsClient = redis.NewClient(&redis.Options{
-		Addr:     "",
-		Password: "",
+		Addr:     "210.5.152.217:30703",
+		Password: "lol_wf+hl.1211+1522",
 		DB:       1,
 	})
 	_, err := rdsClient.Ping().Result()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	frdsClient = redis.NewClient(&redis.Options{
+		Addr:     "210.5.152.217:30703",
+		Password: "lol_wf+hl.1211+1522",
+		DB:       10,
+	})
+	_, err = frdsClient.Ping().Result()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -332,6 +343,9 @@ func main() {
 	defer func() {
 		err := rdsClient.Close()
 		if err != nil {
+			log.Fatal(err)
+		}
+		if err = frdsClient.Close(); err != nil {
 			log.Fatal(err)
 		}
 	}()
@@ -351,33 +365,9 @@ func main() {
 
 	//NewWangyi().spiderMediaColly(2000000, "T1504947175625", "wangyi_history")
 	//NewToutiao().spiderMPColly(6092427995, "news_history", "toutiao_history")
-	NewToutiao().spiderChrome()
+	//NewToutiao().spiderChrome(4160631815, "news_car", "toutiao_car")
 
-	// 一点资讯, 搜狐, 头条
-	// 文化 1968 culture
-	// 情感 3008 emotion
-	// 历史 3294 history
-	// 家居 1006 home
-	// 房产 963 house
-	// 职场 1186 job
-	// 军事 3110 military
-	// 时政 474 politics
-	// 科学 1271 science
-
-	// 体育 3508 sports
-	// 科技 4207 tech
-	// 旅游 3341 travel
-	// 美食 4335 food
-	// 动漫 1544 comic
-	// 育儿 6034 baby
-	// 汽车 11687 car
-	// 教育 5740 education
-	// 娱乐 6135 entertainment
-	// 时尚 5765 fashion
-	// 财经 6636 finance
-	// 星座 5812 fortune
-	// 游戏 5067 game
-	// 健康 6373 healthy
+	spiderContent()
 }
 
 // GetMD5 获取md5值
@@ -390,4 +380,10 @@ func GetMD5(s string) string {
 // Get16MD5 获取16位md5值
 func Get16MD5(s string) string {
 	return string([]byte(GetMD5(s))[8:24])
+}
+
+func handleErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
